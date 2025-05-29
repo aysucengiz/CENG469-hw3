@@ -68,6 +68,7 @@ GLint origin_xLoc[TOTAL_OBJ];
 GLint origin_yLoc[TOTAL_OBJ];
 GLint gWidthLoc[TOTAL_OBJ];
 GLint gHeightLoc[TOTAL_OBJ];
+GLint startAgeLoc[TOTAL_OBJ];
 
 glm::mat4 projectionMatrix;
 glm::mat4 viewingMatrix;
@@ -84,7 +85,6 @@ bool showText = true;
 bool particleMove = true;
 double xpos = -1;
 double ypos = -1;
-GLfloat dt = 0.1;
 
 // Each particle will have its position, velocity, and age.
 vector<Vertex> gParticles;  // xy: location of the particle z: age
@@ -134,10 +134,10 @@ void changeOrigin(){
 
 // A delta time value can be used to animate the scene at some speed.
 // This value should be editable by user interactions to slow down or speed up the runtime.
-#define TIME_UNIT 1.0
+#define TIME_UNIT 0.1
 #define TIME_MIN 0.0
-#define TIME_MAX 10.0
-GLuint deltaTime = 10.0;
+#define TIME_MAX 1.0
+GLfloat dt = 0.2;
 
 
 // A 3-line text must be rendered on the bottom left of the screen.
@@ -490,6 +490,7 @@ void defineLocations(int i){
     origin_yLoc[i] = glGetUniformLocation(gProgram[i], "origin_y");
     gWidthLoc[i] = glGetUniformLocation(gProgram[i], "gWidth");
     gHeightLoc[i] = glGetUniformLocation(gProgram[i], "gHeight");
+    startAgeLoc[i] = glGetUniformLocation(gProgram[i], "startAge");
 }
 
 
@@ -620,7 +621,7 @@ void initComputeBuffers(){
 
 void init()
 {
-    addAttractor(100.0,100.0);
+    addAttractor(-50.0,0.0);
 	glEnable(GL_DEPTH_TEST);
     initComputeBuffers();
 	initShaders();
@@ -641,6 +642,7 @@ void setUniforms(size_t t){
     glUniform1f(origin_yLoc[t], origin_y);
     glUniform1i(gWidthLoc[t], gWidth);
     glUniform1i(gHeightLoc[t], gHeight);
+    glUniform1f(startAgeLoc[t], startAge);
 }
 
 void drawObj(size_t t){
@@ -722,13 +724,13 @@ void keyboard(GLFWwindow* window, int key, int scancode, int action, int mods)
     }
     else if (key == GLFW_KEY_W && action == GLFW_PRESS)
     {
-        std::cout << "deltaTime: " << deltaTime << std::endl;
-        if(deltaTime+TIME_UNIT <= TIME_MAX)deltaTime += TIME_UNIT;
+        std::cout << "dt: " << dt << std::endl;
+        if(dt+TIME_UNIT <= TIME_MAX)dt += TIME_UNIT;
     }
     else if (key == GLFW_KEY_S  && action == GLFW_PRESS)
     {
-        std::cout << "deltaTime: " << deltaTime << std::endl;
-        if(deltaTime-TIME_UNIT >= TIME_MIN)deltaTime -= TIME_UNIT;
+        std::cout << "dt: " << dt << std::endl;
+        if(dt-TIME_UNIT >= TIME_MIN)dt -= TIME_UNIT;
     }
     else if (key == GLFW_KEY_T && action == GLFW_PRESS)
     {
@@ -820,9 +822,14 @@ int main(int argc, char** argv)   // Create Main Function For Bringing It All To
     cout << "particleCount: " << particleCount<< endl;
     cout << "particleSize: " << particleSize<< endl;
     gParticles.resize(particleCount);
+    for(int i=0; i<particleCount; i++){
+        gParticles[i].z = startAge / (float) particleCount * i;
+    }
     gVelocity.resize(particleCount);
-    for(int x = 0; x < particleCount; x++)
-        gVelocity[x].x = 1.0;
+    for(int x = 0; x < particleCount; x++) {
+        gVelocity[x].x = 0.0;
+        gVelocity[x].y = 0.0;
+    }
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
