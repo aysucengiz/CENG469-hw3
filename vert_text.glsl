@@ -1,13 +1,16 @@
-#version 330 core
-                          
-layout(location=0) in vec4 vertex; // <vec2 pos, vec2 tex>
-out vec2 TexCoords;
-                   
-uniform mat4 projection; 
-                         
+#version 430 core
+
+layout(rgba32f, binding = 0) uniform image2D imgOutput;
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
 void main()              
-{                        
-    gl_Position = projection * vec4(vertex.xy, 0.0, 1.0); 
-    TexCoords = vertex.zw; 
+{
+    vec4 value = vec4(0.0, 0.0, 0.0, 1.0);
+    ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+
+    value.x = float(texelCoord.x)/(gl_NumWorkGroups.x);
+    value.y = float(texelCoord.y)/(gl_NumWorkGroups.y);
+
+    imageStore(imgOutput, texelCoord, value);
 };
 

@@ -16,7 +16,6 @@
 #include <glm/gtc/type_ptr.hpp> 
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
-
 #include <map>
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -28,42 +27,6 @@
 
 using namespace std;
 
-
-#define TOTAL_OBJ 5
-
-////////////// INITS FOR THE3 /////////////////
-GLint pointSize = 10;
-GLint pointCount = 10;
-
-
-
-///////// INITS FOR OPENGL ////////////////////
-GLuint vao[TOTAL_OBJ];
-GLuint gProgram[TOTAL_OBJ];
-unsigned int texture;
-int gWidth = 640, gHeight = 480;
-bool particleMove = true;
-double xpos = -1;
-double ypos = -1;
-bool vsync = true;
-
-GLint modelingMatrixLoc[TOTAL_OBJ];
-GLint viewingMatrixLoc[TOTAL_OBJ];
-GLint projectionMatrixLoc[TOTAL_OBJ];
-GLint eyePosLoc[TOTAL_OBJ];
-GLint lightPos1Loc[TOTAL_OBJ];
-
-glm::mat4 projectionMatrix;
-glm::mat4 viewingMatrix;
-glm::mat4 modelingMatrix;
-glm::mat4 modelingMatrix_quad;
-bool initModelingMatrix_quad = false;
-glm::vec3 eyePos(0, 0, 0);
-glm::vec3 lightPos1Init(10,7, 10);
-glm::vec3 lightPos1(0, 0, -8);
-glm::vec3 eyeGaze(0, 0, -1);
-glm::vec3 eyeUp(0, 1, 0);
-
 /// Holds all state information relevant to a character as loaded using FreeType
 struct Character {
     GLuint TextureID;   // ID handle of the glyph texture
@@ -74,212 +37,123 @@ struct Character {
 
 std::map<GLchar, Character> Characters;
 
+GLfloat origin_x = 10.0,origin_y= 10.0, startAge=1.0; // birth point
 struct Vertex
 {
-	Vertex(GLfloat inX, GLfloat inY, GLfloat inZ) : x(inX), y(inY), z(inZ) {}
-	GLfloat x, y, z;
+    Vertex(GLfloat inX=origin_x, GLfloat inY=origin_y, GLfloat inZ=startAge, GLfloat padding=0.0) : x(inX), y(inY), z(inZ) {}
+    GLfloat x, y, z, padding;
 
-    Vertex operator+(const Vertex& other) const {
-        return Vertex(x + other.x, y + other.y, z + other.z);
-    }
-
-    Vertex operator-(const Vertex& other) const {
-        return Vertex(x - other.x, y - other.y, z - other.z);
-    }
-
-    Vertex operator*(GLfloat scalar) const {
-        return Vertex(x * scalar, y * scalar, z * scalar);
-    }
-
-    friend Vertex operator*(GLfloat scalar, const Vertex& v) {
-        return Vertex(v.x * scalar, v.y * scalar, v.z * scalar);
-    }
-
-    friend Vertex operator/(const Vertex& v,GLfloat scalar) {
-        return Vertex(v.x / scalar, v.y / scalar, v.z / scalar);
-    }
-
-    GLfloat dot_product(const Vertex& other) const {
-        return x * other.x + y * other.y + z * other.z;
-    }
-
-    Vertex cross_product(const Vertex& other) const {
-        return Vertex(
-                y * other.z - z * other.y,
-                z * other.x - x * other.z,
-                x * other.y - y * other.x
-        );
-    }
-
-    GLfloat mag(){
-        return sqrt(x*x+y*y+z*z);
-    }
+    Vertex operator+(const Vertex& other) const {return Vertex(x + other.x, y + other.y, z + other.z);}
+    Vertex operator-(const Vertex& other) const {return Vertex(x - other.x, y - other.y, z - other.z);}
+    Vertex operator*(GLfloat scalar) const {return Vertex(x * scalar, y * scalar, z * scalar);}
+    friend Vertex operator*(GLfloat scalar, const Vertex& v) {return Vertex(v.x * scalar, v.y * scalar, v.z * scalar);}
+    friend Vertex operator/(const Vertex& v,GLfloat scalar) {return Vertex(v.x / scalar, v.y / scalar, v.z / scalar);}
 };
 
-struct Texture
-{
-	Texture(GLfloat inU, GLfloat inV) : u(inU), v(inV) {}
-	GLfloat u, v;
-};
+///////// INITS FOR OPENGL ////////////////////
+#define TOTAL_OBJ 3
+#define TEXT_NUM 2
+GLuint vao[TOTAL_OBJ];
+GLuint gProgram[TOTAL_OBJ];
+int gWidth = 640, gHeight = 480;
+bool vsync = true;
 
-struct Normal
-{
-	Normal(GLfloat inX, GLfloat inY, GLfloat inZ) : x(inX), y(inY), z(inZ) {}
-	GLfloat x, y, z;
+GLint modelingMatrixLoc[TOTAL_OBJ];
+GLint viewingMatrixLoc[TOTAL_OBJ];
+GLint projectionMatrixLoc[TOTAL_OBJ];
+GLint particleSizeLoc[TOTAL_OBJ];
+GLint dtLoc[TOTAL_OBJ];
+GLint currAttractorLoc[TOTAL_OBJ];
+GLint origin_xLoc[TOTAL_OBJ];
+GLint origin_yLoc[TOTAL_OBJ];
+GLint gWidthLoc[TOTAL_OBJ];
+GLint gHeightLoc[TOTAL_OBJ];
 
-    Normal operator+(const Normal& other) const {
-        return Normal(x + other.x, y + other.y, z + other.z);
-    }
-
-    Normal operator-(const Normal& other) const {
-        return Normal(x - other.x, y - other.y, z - other.z);
-    }
-
-    Normal operator*(GLfloat scalar) const {
-        return Normal(x * scalar, y * scalar, z * scalar);
-    }
-
-    friend Normal operator*(GLfloat scalar, const Normal& v) {
-        return Normal(v.x * scalar, v.y * scalar, v.z * scalar);
-    }
-
-    friend Normal operator/(const Normal& v,GLfloat scalar) {
-        return Normal(v.x / scalar, v.y / scalar, v.z / scalar);
-    }
-
-    GLfloat dot_product(const Normal& other) const {
-        return x * other.x + y * other.y + z * other.z;
-    }
-
-    Normal cross_product(const Normal& other) const {
-        return Normal(
-                y * other.z - z * other.y,
-                z * other.x - x * other.z,
-                x * other.y - y * other.x
-        );
-    }
-
-    int mag(){
-        return sqrt(x*x+y*y+z*z);
-    }
-};
-
-struct Face
-{
-	Face(int v[], int t[], int n[]) {
-		vIndex[0] = v[0];
-		vIndex[1] = v[1];
-		vIndex[2] = v[2];
-		tIndex[0] = t[0];
-		tIndex[1] = t[1];
-		tIndex[2] = t[2];
-		nIndex[0] = n[0];
-		nIndex[1] = n[1];
-		nIndex[2] = n[2];
-	}
-	GLuint vIndex[3], tIndex[3], nIndex[3];
-};
-
-vector<Vertex> gVertices[TOTAL_OBJ];
-vector<Texture> gTextures[TOTAL_OBJ];
-vector<Normal> gNormals[TOTAL_OBJ];
-vector<Face> gFaces[TOTAL_OBJ];
+glm::mat4 projectionMatrix;
+glm::mat4 viewingMatrix;
+glm::mat4 modelingMatrix_quad = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
 
 GLuint gVertexAttribBuffer[TOTAL_OBJ], gIndexBuffer[TOTAL_OBJ], gTextVBO;
-GLint gInVertexLoc[TOTAL_OBJ], gInNormalLoc[TOTAL_OBJ];
 int gVertexDataSizeInBytes[TOTAL_OBJ], gNormalDataSizeInBytes[TOTAL_OBJ], gTextureDataSizeInBytes[TOTAL_OBJ];
 
-bool ParseObj(const string& fileName, int objId)
-{
-	fstream myfile;
 
-	// Open the input 
-	myfile.open(fileName.c_str(), std::ios::in);
+////////////// THE3 //////////////
+GLfloat particleSize = 10.0;
+GLint particleCount = 10;
+bool showText = true;
+bool particleMove = true;
+double xpos = -1;
+double ypos = -1;
+GLfloat dt = 0.1;
 
-	if (myfile.is_open())
-	{
-		string curLine;
+// Each particle will have its position, velocity, and age.
+vector<Vertex> gParticles;  // xy: location of the particle z: age
+vector<Vertex> gVelocity;
 
-		while (getline(myfile, curLine))
-		{
-			stringstream str(curLine);
-			GLfloat c1, c2, c3;
-			GLuint index[9];
-			string tmp;
+// There will be attractors in the scene, each with its own mass value set.
+#define ATTRACTOR_COUNT 12
+vector<Vertex> gAttractor(ATTRACTOR_COUNT);  // xy: location of the attractor z: mass
 
-			if (curLine.length() >= 2)
-			{
-				if (curLine[0] == 'v')
-				{
-					if (curLine[1] == 't') // texture
-					{
-						str >> tmp; // consume "vt"
-						str >> c1 >> c2;
-						gTextures[objId].push_back(Texture(c1, c2));
-					}
-					else if (curLine[1] == 'n') // normal
-					{
-						str >> tmp; // consume "vn"
-						str >> c1 >> c2 >> c3;
-						gNormals[objId].push_back(Normal(c1, c2, c3));
-					}
-					else // vertex
-					{
-						str >> tmp; // consume "v"
-						str >> c1 >> c2 >> c3;
-						gVertices[objId].push_back(Vertex(c1, c2, c3));
-					}
-				}
-				else if (curLine[0] == 'f') // face
-				{
-					str >> tmp; // consume "f"
-					char c;
-					int vIndex[3], nIndex[3], tIndex[3];
-					str >> vIndex[0]; str >> c >> c; // consume "//"
-					str >> nIndex[0];
-					str >> vIndex[1]; str >> c >> c; // consume "//"
-					str >> nIndex[1];
-					str >> vIndex[2]; str >> c >> c; // consume "//"
-					str >> nIndex[2];
-
-					assert(vIndex[0] == nIndex[0] &&
-						vIndex[1] == nIndex[1] &&
-						vIndex[2] == nIndex[2]); // a limitation for now
-
-					// make indices start from 0
-					for (int c = 0; c < 3; ++c)
-					{
-						vIndex[c] -= 1;
-						nIndex[c] -= 1;
-						tIndex[c] -= 1;
-					}
-
-					gFaces[objId].push_back(Face(vIndex, tIndex, nIndex));
-				}
-				else
-				{
-					cout << "Ignoring unidentified line in obj file: " << curLine << endl;
-				}
-			}
-
-			//data += curLine;
-			if (!myfile.eof())
-			{
-				//data += "\n";
-			}
-		}
-
-		myfile.close();
-	}
-	else
-	{
-		return false;
-	}
-    std::cout << "gVertices[objId].size():" << gVertices[objId].size() << std::endl;
-	assert(gVertices[objId].size() == gNormals[objId].size());
-
-	return true;
+// Initially, the program should launch with some attractors put into the scene
+#define DEFAULT_MASS 10
+#define MASS_UNIT 10
+#define MASS_MIN 10
+#define MASS_MAX 100
+int currAttractor = -1;
+void addAttractor(GLfloat locx=xpos, GLfloat locy=ypos){
+    if(currAttractor >= 11){
+        for(int i=0; i<11; i++){
+            gAttractor[i] = gAttractor[i+1];
+        }
+    }else{
+        currAttractor++;
+    }
+    gAttractor[currAttractor].x =locx;
+    gAttractor[currAttractor].y =locy;
+    gAttractor[currAttractor].z =DEFAULT_MASS;
 }
+
+void removeAttractor(){
+    if(currAttractor != 0) {
+        currAttractor--;
+    }
+}
+
+void changeOrigin(){
+    origin_y = ypos;
+    origin_x = xpos;
+}
+
+
+
+// The velocity of a point is also recomputed by formulating a gravitational pull physics with all attractors in the scene.
+
+// Points will be colored according to their current age.
+// The points should be drawn blended into the frame so that overlapping points result in a blended color value.
+
+
+// A delta time value can be used to animate the scene at some speed.
+// This value should be editable by user interactions to slow down or speed up the runtime.
+#define TIME_UNIT 1.0
+#define TIME_MIN 0.0
+#define TIME_MAX 10.0
+GLuint deltaTime = 10.0;
+
+
+// A 3-line text must be rendered on the bottom left of the screen.
+// # of curr attractors = currAttractor + 1
+// curr mass value = gAttractor[currAttractor].z
+// mode = currMode (diff colour, origin or attractor)
+enum mode{
+    ORIGIN,
+    ATTRACTOR
+};
+mode currMode = ORIGIN;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+unsigned int buffers[2];
+unsigned int bufferstex[2];
+int gParticlesDataSizeInBytes,gVelocityDataSizeInBytes;
 
 bool ReadDataFromFile(
 	const string& fileName, ///< [in]  Name of the shader file
@@ -313,158 +187,42 @@ bool ReadDataFromFile(
 	return true;
 }
 
-GLuint createVS(const char* shaderName)
+GLuint createS(const char* shaderName, int shaderType)
 {
-	string shaderSource;
+    string shaderSource;
 
-	string filename(shaderName);
-	if (!ReadDataFromFile(filename, shaderSource))
-	{
-		cout << "Cannot find file name: " + filename << endl;
-		exit(-1);
-	}
-
-	GLint length = shaderSource.length();
-	const GLchar* shader = (const GLchar*)shaderSource.c_str();
-
-	GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vs, 1, &shader, &length);
-	glCompileShader(vs);
-
-	char output[1024] = { 0 };
-	glGetShaderInfoLog(vs, 1024, &length, output);
-	printf("VS compile log: %s\n", output);
-
-	return vs;
-}
-
-GLuint createFS(const char* shaderName)
-{
-	string shaderSource;
-
-	string filename(shaderName);
-	if (!ReadDataFromFile(filename, shaderSource))
-	{
-		cout << "Cannot find file name: " + filename << endl;
-		exit(-1);
-	}
-
-	GLint length = shaderSource.length();
-	const GLchar* shader = (const GLchar*)shaderSource.c_str();
-
-	GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fs, 1, &shader, &length);
-	glCompileShader(fs);
-
-	char output[1024] = { 0 };
-	glGetShaderInfoLog(fs, 1024, &length, output);
-	printf("FS compile log: %s\n", output);
-
-	return fs;
-}
-
-
-unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-unsigned int gBuffer;
-unsigned int gPosition, gNormal, gAlbedoSpec, rboDepth;
-
-void initGBuffer(){
-    glGenFramebuffers(1, &gBuffer);
-    glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-
-
-    glGenTextures(1, &gPosition);
-    glBindTexture(GL_TEXTURE_2D, gPosition);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, gWidth, gHeight, 0, GL_RGB, GL_FLOAT, nullptr);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, gPosition, 0);
-
-    glGenTextures(1, &gNormal);
-    glBindTexture(GL_TEXTURE_2D, gNormal);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, gWidth, gHeight, 0, GL_RGB, GL_FLOAT, nullptr);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
-
-    glGenTextures(1, &gAlbedoSpec);
-    glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, gWidth, gHeight, 0, GL_RGBA, GL_FLOAT, nullptr);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, gAlbedoSpec, 0);
-
-    glDrawBuffers(3, attachments);
-
-    glGenRenderbuffers(1, &rboDepth);
-    glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, gWidth, gHeight);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cout << "G-buffer framebuffer not complete!" << std::endl;
+    string filename(shaderName);
+    if (!ReadDataFromFile(filename, shaderSource))
+    {
+        cout << "Cannot find file name: " + filename << endl;
+        exit(-1);
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    GLint length = shaderSource.length();
+    const GLchar* shader = (const GLchar*)shaderSource.c_str();
 
-
-}
-
-unsigned int attachmentsBlur[1] = { GL_COLOR_ATTACHMENT0};
-unsigned int gBlurbuffer;
-unsigned int gTexture;
-GLuint gBlurDepth;
-
-
-void initBlurBuffer(){
-    glGenFramebuffers(1, &gBlurbuffer);
-    glBindFramebuffer(GL_FRAMEBUFFER, gBlurbuffer);
-
-    glGenTextures(1, &gTexture);
-    glBindTexture(GL_TEXTURE_2D, gTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, gWidth, gHeight, 0, GL_RGBA, GL_FLOAT, nullptr);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, gTexture, 0);
-
-    glDrawBuffers(1, attachmentsBlur);
-
-
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cout << "G-buffer framebuffer not complete!" << std::endl;
+    GLuint s;
+    if(shaderType==0){
+        s = glCreateShader(GL_FRAGMENT_SHADER);
+    }else if(shaderType==1){
+        s = glCreateShader(GL_VERTEX_SHADER);
+    }else if(shaderType==2){
+        s = glCreateShader(GL_COMPUTE_SHADER);
     }
+    glShaderSource(s, 1, &shader, &length);
+    glCompileShader(s);
 
+    char output[1024] = { 0 };
+    glGetShaderInfoLog(s, 1024, &length, output);
+    printf("%s log: %s\n", shaderName, output);
 
-    glGenTextures(1, &gBlurDepth);
-    glBindTexture(GL_TEXTURE_2D, gBlurDepth);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, gWidth, gHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gBlurDepth, 0);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-
+    return s;
 }
-
 
 void resizeText(int windowWidth, int windowHeight){
-    initGBuffer();
-    initBlurBuffer();
     glm::mat4 projection = glm::ortho(0.0f, static_cast<GLfloat>(windowWidth), 0.0f, static_cast<GLfloat>(windowHeight));
-    glUseProgram(gProgram[2]);
-    glUniformMatrix4fv(glGetUniformLocation(gProgram[2], "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    glUseProgram(gProgram[TEXT_NUM]);
+    glUniformMatrix4fv(glGetUniformLocation(gProgram[TEXT_NUM], "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 }
 
 
@@ -552,7 +310,7 @@ void initFonts(int windowWidth, int windowHeight)
     GLuint vaoLocal, vbo;
     glGenVertexArrays(1, &vaoLocal);
     assert(vaoLocal > 0);
-    vao[2] = vaoLocal;
+    vao[TEXT_NUM] = vaoLocal;
     glBindVertexArray(vaoLocal);
 
     glGenBuffers(1, &gTextVBO);
@@ -588,8 +346,8 @@ GLfloat getFPS(){
 void renderText(const std::string& text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color)
 {
     // Activate corresponding render state
-    glUseProgram(gProgram[2]);
-    glUniform3f(glGetUniformLocation(gProgram[2], "textColor"), color.x, color.y, color.z);
+    glUseProgram(gProgram[TEXT_NUM]);
+    glUniform3f(glGetUniformLocation(gProgram[TEXT_NUM], "textColor"), color.x, color.y, color.z);
     glActiveTexture(GL_TEXTURE0);
 
     // Iterate through all characters
@@ -618,7 +376,7 @@ void renderText(const std::string& text, GLfloat x, GLfloat y, GLfloat scale, gl
         // Render glyph texture over quad
         glBindTexture(GL_TEXTURE_2D, ch.TextureID);
 
-        glBindVertexArray(vao[2]);
+        glBindVertexArray(vao[TEXT_NUM]);
         // Update content of VBO memory
         glBindBuffer(GL_ARRAY_BUFFER, gTextVBO);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices); // Be sure to use glBufferSubData and not glBufferData
@@ -694,111 +452,57 @@ void writeText(){
 
 void initVBO()
 {
-    for (size_t t = 0; t < 5; t++) // 2 objects.-> haha no t=0 is armadillo, t=1 is background quad.
-    {
-        if(t==2) continue;
-        glGenVertexArrays(1, &vao[t]);
-        assert(vao[t] > 0);
-
-        glBindVertexArray(vao[t]);
-        cout << "vao = " << vao[t] << endl;
-
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-        glEnableVertexAttribArray(2);
-        assert(glGetError() == GL_NONE);
-
-        glGenBuffers(1, &gVertexAttribBuffer[t]);
-        glGenBuffers(1, &gIndexBuffer[t]);
-
-        assert(gVertexAttribBuffer[t] > 0 && gIndexBuffer[t] > 0);
-
-        glBindBuffer(GL_ARRAY_BUFFER, gVertexAttribBuffer[t]);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gIndexBuffer[t]);
-
-        gVertexDataSizeInBytes[t] = gVertices[t].size() * 3 * sizeof(GLfloat);
-        gNormalDataSizeInBytes[t] = gNormals[t].size() * 3 * sizeof(GLfloat);
-        gTextureDataSizeInBytes[t] = gTextures[t].size() * 2 * sizeof(GLfloat);
-        int indexDataSizeInBytes = gFaces[t].size() * 3 * sizeof(GLuint);
-
-        GLfloat* vertexData = new GLfloat[gVertices[t].size() * 3];
-        GLfloat* normalData = new GLfloat[gNormals[t].size() * 3];
-        GLfloat* textureData = new GLfloat[gTextures[t].size() * 2];
-        GLuint* indexData = new GLuint[gFaces[t].size() * 3];
-
-        float minX = 1e6, maxX = -1e6;
-        float minY = 1e6, maxY = -1e6;
-        float minZ = 1e6, maxZ = -1e6;
-
-        for (int i = 0; i < gVertices[t].size(); ++i)
-        {
-            vertexData[3 * i] = gVertices[t][i].x;
-            vertexData[3 * i + 1] = gVertices[t][i].y;
-            vertexData[3 * i + 2] = gVertices[t][i].z;
-
-            minX = std::min(minX, gVertices[t][i].x);
-            maxX = std::max(maxX, gVertices[t][i].x);
-            minY = std::min(minY, gVertices[t][i].y);
-            maxY = std::max(maxY, gVertices[t][i].y);
-            minZ = std::min(minZ, gVertices[t][i].z);
-            maxZ = std::max(maxZ, gVertices[t][i].z);
-        }
-
-        std::cout << "minX = " << minX << std::endl;
-        std::cout << "maxX = " << maxX << std::endl;
-        std::cout << "minY = " << minY << std::endl;
-        std::cout << "maxY = " << maxY << std::endl;
-        std::cout << "minZ = " << minZ << std::endl;
-        std::cout << "maxZ = " << maxZ << std::endl;
-
-        for (int i = 0; i < gNormals[t].size(); ++i)
-        {
-            normalData[3 * i] = gNormals[t][i].x;
-            normalData[3 * i + 1] = gNormals[t][i].y;
-            normalData[3 * i + 2] = gNormals[t][i].z;
-        }
-
-        for (int i = 0; i < gTextures[t].size(); ++i)
-        {
-            textureData[2 * i] = gTextures[t][i].u;
-            textureData[2 * i + 1] = gTextures[t][i].v;
-        }
-
-        for (int i = 0; i < gFaces[t].size(); ++i)
-        {
-            indexData[3 * i] = gFaces[t][i].vIndex[0];
-            indexData[3 * i + 1] = gFaces[t][i].vIndex[1];
-            indexData[3 * i + 2] = gFaces[t][i].vIndex[2];
-        }
-
-
-        glBufferData(GL_ARRAY_BUFFER, gVertexDataSizeInBytes[t] + gNormalDataSizeInBytes[t] + gTextureDataSizeInBytes[t], 0, GL_STATIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, gVertexDataSizeInBytes[t], vertexData);
-        glBufferSubData(GL_ARRAY_BUFFER, gVertexDataSizeInBytes[t], gNormalDataSizeInBytes[t], normalData);
-        glBufferSubData(GL_ARRAY_BUFFER, gVertexDataSizeInBytes[t] + gNormalDataSizeInBytes[t], gTextureDataSizeInBytes[t], textureData);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexDataSizeInBytes, indexData, GL_STATIC_DRAW);
-
-        // done copying; can free now
-        delete[] vertexData;
-        delete[] normalData;
-        delete[] textureData;
-        delete[] indexData;
-
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(gVertexDataSizeInBytes[t]));
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(gVertexDataSizeInBytes[t] + gNormalDataSizeInBytes[t]));
+    int t= 0;
+    glEnable(GL_PROGRAM_POINT_SIZE);
+    GLenum err;
+    while ((err = glGetError()) != GL_NO_ERROR) {
+        std::cerr << "GL error before glBindVertexArray: " << std::hex << err << std::endl;
     }
+
+    glGenVertexArrays(1, &vao[t]);
+    assert(vao[t] > 0);
+
+    std::cout << "vao =: " << vao[t] << std::endl;
+
+    glBindVertexArray(vao[t]);
+    err = glGetError(); if (err) std::cerr << "glBindVertexArray error: " << err << std::endl;
+
+    glEnableVertexAttribArray(0);
+    err = glGetError(); if (err) std::cerr << "glEnableVertexAttribArray error: " << err << std::endl;
+
+    glBindBuffer(GL_ARRAY_BUFFER, buffers[0]);
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 }
+
+
+void defineLocations(int i){
+    glUseProgram(gProgram[i]);
+
+    modelingMatrixLoc[i] = glGetUniformLocation(gProgram[i], "modelingMatrix");
+    viewingMatrixLoc[i] = glGetUniformLocation(gProgram[i], "viewingMatrix");
+    projectionMatrixLoc[i] = glGetUniformLocation(gProgram[i], "projectionMatrix");
+    particleSizeLoc[i] = glGetUniformLocation(gProgram[i], "particleSize");
+    dtLoc[i] = glGetUniformLocation(gProgram[i], "dt");
+    currAttractorLoc[i] = glGetUniformLocation(gProgram[i], "currAttractor");
+    origin_xLoc[i] = glGetUniformLocation(gProgram[i], "origin_x");
+    origin_yLoc[i] = glGetUniformLocation(gProgram[i], "origin_y");
+    gWidthLoc[i] = glGetUniformLocation(gProgram[i], "gWidth");
+    gHeightLoc[i] = glGetUniformLocation(gProgram[i], "gHeight");
+}
+
+
 
 GLuint fs1=0;
 void bindShader(std::string filename_vert,std::string filename_frag,  int programId){
 
     if(gProgram[programId]) glDeleteProgram(programId);
     gProgram[programId] = glCreateProgram();
-    fs1 = createFS(filename_frag.c_str());
+    fs1 = createS(filename_frag.c_str(),0);
     glAttachShader(gProgram[programId], fs1);
 
-    GLuint vs1 = createVS(filename_vert.c_str());
+    GLuint vs1 = createS(filename_vert.c_str(),1);
     glAttachShader(gProgram[programId], vs1);
 
     glLinkProgram(gProgram[programId]);
@@ -807,204 +511,182 @@ void bindShader(std::string filename_vert,std::string filename_frag,  int progra
 
     if (status != GL_TRUE)
     {
-        cout << "Program link failed for " << programId << endl;
+        GLint logLength;
+        glGetProgramiv(gProgram[programId], GL_INFO_LOG_LENGTH, &logLength);
+        std::vector<char> log(logLength);
+        glGetProgramInfoLog(gProgram[programId], logLength, nullptr, log.data());
+        std::cerr << "Program link failed for " << programId << ":\n" << log.data() << std::endl;
         exit(-1);
     }
-    int i=programId;
-    glUseProgram(gProgram[i]);
 
-    modelingMatrixLoc[i] = glGetUniformLocation(gProgram[i], "modelingMatrix");
-    viewingMatrixLoc[i] = glGetUniformLocation(gProgram[i], "viewingMatrix");
-    projectionMatrixLoc[i] = glGetUniformLocation(gProgram[i], "projectionMatrix");
-    eyePosLoc[i] = glGetUniformLocation(gProgram[i], "eyePos");
-    lightPos1Loc[i] = glGetUniformLocation(gProgram[i], "lightPos1");
+    defineLocations(programId);
 }
+
+
+void bindComputeShader(std::string filename_comp,  int programId){
+
+    if(gProgram[programId]) glDeleteProgram(programId);
+    gProgram[programId] = glCreateProgram();
+
+    GLuint cs1 = createS(filename_comp.c_str(),2);
+    glAttachShader(gProgram[programId], cs1);
+
+    glLinkProgram(gProgram[programId]);
+    GLint status;
+    glGetProgramiv(gProgram[programId], GL_LINK_STATUS, &status);
+
+    if (status != GL_TRUE)
+    {
+        GLint logLength;
+        glGetProgramiv(gProgram[programId], GL_INFO_LOG_LENGTH, &logLength);
+        std::vector<char> log(logLength);
+        glGetProgramInfoLog(gProgram[programId], logLength, nullptr, log.data());
+        std::cerr << "Program link failed for " << programId << ":\n" << log.data() << std::endl;
+        exit(-1);
+    }
+    defineLocations(programId);
+}
+
 
 void initShaders()
 {
-    bindShader("vert.glsl","frag.glsl",0); //for armadillo
+    GLenum err;
+    while ((err = glGetError()) != GL_NO_ERROR) {
+        std::cerr << "GL error before initShaders: " << std::hex << err << std::endl;
+    }
+    bindShader("vert.glsl","frag.glsl",0);
+    bindComputeShader("comp.glsl",1);
 }
 
 
-unsigned int quadVAO[2] = {0,0},  quadVBO[2];
 
-void initTexture(int id) {
+void initComputeBuffers(){
+    gParticlesDataSizeInBytes = gParticles.size() * 4 * sizeof(GLfloat);
+    gVelocityDataSizeInBytes = gVelocity.size() * 4 * sizeof(GLfloat);
+    cout << "Vertex struct size:" << sizeof(Vertex) << 4 * sizeof(GLfloat)<< endl;
+    glGenBuffers(2, buffers);
+    glGenTextures(2, bufferstex);
 
-    float quadVertices[] = {
-            // position   // texCoords
-            -1.0f,  1.0f,   0.0f, 1.0f,
-            -1.0f, -1.0f,   0.0f, 0.0f,
-            1.0f, -1.0f,   1.0f, 0.0f,
+    /////////////////////// position
+    glBindBuffer(GL_ARRAY_BUFFER, buffers[0]);
+    glBufferData(GL_ARRAY_BUFFER, gParticlesDataSizeInBytes, NULL, GL_DYNAMIC_COPY);
 
-            -1.0f,  1.0f,   0.0f, 1.0f,
-            1.0f, -1.0f,   1.0f, 0.0f,
-            1.0f,  1.0f,   1.0f, 1.0f
-    };
+    GLfloat *positionData = (GLfloat *) glMapBufferRange(GL_ARRAY_BUFFER, 0, gParticlesDataSizeInBytes,
+                          GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
 
-    glGenVertexArrays(1, &quadVAO[id]);
-    glGenBuffers(1, &quadVBO[id]);
+    if(positionData) {
+        for (int i = 0; i < gParticles.size(); ++i) {
+            positionData[4 * i] = gParticles[i].x;
+            positionData[4 * i + 1] = gParticles[i].y;
+            positionData[4 * i + 2] = gParticles[i].z;
+            positionData[4 * i + 3] = 0.0f;
+        }
+        glUnmapBuffer(GL_ARRAY_BUFFER);
+    } else {
+        std::cerr << "Failed to map position buffer!" << std::endl;
+    }
 
-    glBindVertexArray(quadVAO[id]);
-    glBindBuffer(GL_ARRAY_BUFFER, quadVBO[id]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+    glBindTexture(GL_TEXTURE_BUFFER, bufferstex[0]);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, buffers[0]);
 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
 
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    /////////////////////// velocity
+    glBindBuffer(GL_ARRAY_BUFFER, buffers[1]);
+    glBufferData(GL_ARRAY_BUFFER, gVelocityDataSizeInBytes, NULL, GL_DYNAMIC_COPY);
 
-    glBindVertexArray(0);
+    GLfloat *velocityData= (GLfloat *) glMapBufferRange(GL_ARRAY_BUFFER, 0, gVelocityDataSizeInBytes,
+                          GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+    if (velocityData) {
+        for (int i = 0; i < gVelocity.size(); ++i) {
+            velocityData[4 * i] = gVelocity[i].x;
+            velocityData[4 * i + 1] = gVelocity[i].y;
+            velocityData[4 * i + 2] = gVelocity[i].z;
+            velocityData[4 * i + 3] = 0.0f;
+        }
+        glUnmapBuffer(GL_ARRAY_BUFFER);
+    } else {
+        std::cerr << "Failed to map position buffer!" << std::endl;
+    }
+    glBindTexture(GL_TEXTURE_BUFFER, bufferstex[1]);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, buffers[1]);
+
+
+    GLenum err;
+    while ((err = glGetError()) != GL_NO_ERROR) {
+        std::cerr << "GL error after initComputeBuffers: " << std::hex << err << std::endl;
+    }
+
 }
 
 void init()
 {
-	//ParseObj("armadillo.obj", 0);
-	//ParseObj("cubemap.obj", 1);
-	//ParseObj("quad.obj", 3);
-
+    addAttractor(100.0,100.0);
 	glEnable(GL_DEPTH_TEST);
-	initTexture(0);
-    initTexture(1);
+    initComputeBuffers();
 	initShaders();
 	initVBO();
     initFonts(gWidth, gHeight);
-    initGBuffer();
-    initBlurBuffer();
 }
-
-
-
 
 void setUniforms(size_t t){
     glUseProgram(gProgram[t]);
     glUniformMatrix4fv(projectionMatrixLoc[t], 1, GL_FALSE, glm::value_ptr(projectionMatrix));
     glUniformMatrix4fv(viewingMatrixLoc[t], 1, GL_FALSE, glm::value_ptr(viewingMatrix));
     glUniformMatrix4fv(modelingMatrixLoc[t], 1, GL_FALSE, glm::value_ptr(modelingMatrix_quad));
-    glUniform3fv(eyePosLoc[t], 1, glm::value_ptr(eyePos));
-    glUniform3fv(lightPos1Loc[t], 1, glm::value_ptr(lightPos1));
-    if (t == 3) {
-        glUniform1i(glGetUniformLocation(gProgram[t], "gPosition"), 0);
-        glUniform1i(glGetUniformLocation(gProgram[t], "gNormal"), 1);
-        glUniform1i(glGetUniformLocation(gProgram[t], "gAlbedoSpec"), 2);
-    }else if(t==4) {
-        glUniform1i(glGetUniformLocation(gProgram[t], "gTexture"), 0);
+    glUniform1f(particleSizeLoc[t], particleSize);
 
-    }
+    glUniform1f(dtLoc[t], dt);
+    glUniform1i(currAttractorLoc[t], currAttractor);
+    glUniform1f(origin_xLoc[t], origin_x);
+    glUniform1f(origin_yLoc[t], origin_y);
+    glUniform1i(gWidthLoc[t], gWidth);
+    glUniform1i(gHeightLoc[t], gHeight);
 }
 
 void drawObj(size_t t){
-    if(t >= 3)
-        glBindVertexArray(quadVAO[t-3]);
-    else
-        glBindVertexArray(vao[t]);
+    glBindVertexArray(vao[t]);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
 
-    if (t == 1|| t==2 || t==3) {
-        glDisable(GL_CULL_FACE);
-        glDepthMask(GL_FALSE);
-        glDepthFunc(GL_LEQUAL);
-    }
+    glDrawArrays(GL_POINTS, 0, particleCount);
 
-    if(t>=3) glDrawArrays(GL_TRIANGLES, 0, 6);
-    else     glDrawElements(GL_TRIANGLES, gFaces[t].size() * 3, GL_UNSIGNED_INT, 0);
-
-    if (t == 1 || t==2 || t==3) {
-        glEnable(GL_CULL_FACE);
-        glDepthMask(GL_TRUE);
-        glDepthFunc(GL_LESS);
-    }
+    glEnable(GL_DEPTH_TEST);
 }
 
 int sizeText = log2(std::max(gWidth, gHeight));
 
-
 void drawScene()
 {
-
+    // arrange the buffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClearColor(0, 0, 0, 1);
     glClearDepth(1.0f);
     glClearStencil(0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-
-
-    glDisable(GL_BLEND);
-    // geometry pass
-    glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-    glDrawBuffers(3, attachments);
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glDisable(GL_BLEND);
-    setUniforms(0);
-    drawObj(0);
-
+    // draw using frag and vert shaders
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-
-    // Lighting pass
-    glBindFramebuffer(GL_FRAMEBUFFER, gBlurbuffer);
-    glDrawBuffers(1, attachmentsBlur);
-    glClearColor(0, 0, 0, 1);
-    glClearDepth(1.0f);
-    glClearStencil(0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-    glBlitNamedFramebuffer(gBuffer, gBlurbuffer, 0, 0, gWidth, gHeight, 0, 0, gWidth, gHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, gPosition);
-    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, gNormal);
-    glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
-    glTextureBarrier();
-
-    setUniforms(3);
-    drawObj(3);
-
-    // render cubemap
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
-    glTextureBarrier();
-    setUniforms(1);
-    drawObj(1);
-
-
-    // Render composite
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBlitNamedFramebuffer(gBlurbuffer, 0, 0, 0, gWidth, gHeight, 0, 0, gWidth, gHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, gTexture);
     glTextureBarrier();
-    setUniforms(4);
-    drawObj(4);
-
+    setUniforms(0);
+    drawObj(0);
+    glDisable(GL_BLEND);
 }
 
 
 void display(GLFWwindow *window)
 {
+    // computations
+    setUniforms(1);
+    glBindImageTexture(0, bufferstex[1], 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+    glBindImageTexture(1, bufferstex[0], 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+    glDispatchCompute(particleCount / 128 + 1, 1, 1);
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-    glClearColor(0, 0, 0, 0);
-    glClearDepth(1.0f);
-    glClearStencil(0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-    // Compute the modeling matrix
-    static float changePitch = (float)(1.0 / 180.f) * M_PI;
-    if(particleMove) {
-        glm::quat pitchQuat(cos(changePitch / 2), 0, 1 * sin(changePitch / 2), 0);
-        modelingMatrix *= glm::toMat4(pitchQuat);
-    }
-
-    // Draw the scene
-    if(!initModelingMatrix_quad){
-        glm::mat4 matT = glm::translate(glm::mat4(1.0), glm::vec3(-0.0f, -0.3f, -4.2f));
-        modelingMatrix = matT;
-        modelingMatrix_quad = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
-        initModelingMatrix_quad = true;
-    }
-    lightPos1= glm::vec3( viewingMatrix * modelingMatrix_quad * glm::vec4(lightPos1Init, 1));
-
+    // show on the screen
     drawScene();
     writeText();
-
 }
 
 
@@ -1018,11 +700,7 @@ void reshape(GLFWwindow* window, int w, int h)
 
 	glViewport(0, 0, w, h);
 
-
-	float fovyRad = (float)(90.0 / 180.0) * M_PI;
-	projectionMatrix = glm::perspective(fovyRad, (float)w/(float)h, 1.0f, 1000.0f);
-
-	viewingMatrix = glm::lookAt(eyePos, eyePos + eyeGaze, eyeUp);
+    projectionMatrix = glm::ortho(-w / 2.0f, w / 2.0f,-h / 2.0f, h / 2.0f,-1.0f, 1.0f);
 
     resizeText(gWidth,gHeight);
     sizeText = log2(std::max(gWidth, gHeight));
@@ -1034,7 +712,7 @@ void reshape(GLFWwindow* window, int w, int h)
 void keyboard(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     if (action == GLFW_PRESS) {
-        pressedKey = key;  // store the key code globally
+        pressedKey = key;
         keyStart = glfwGetTime();
     }
 
@@ -1042,56 +720,34 @@ void keyboard(GLFWwindow* window, int key, int scancode, int action, int mods)
     {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
-    else if ((key == GLFW_KEY_KP_ADD  || key == GLFW_KEY_UP) && action == GLFW_PRESS)
+    else if (key == GLFW_KEY_W && action == GLFW_PRESS)
     {
-
+        std::cout << "deltaTime: " << deltaTime << std::endl;
+        if(deltaTime+TIME_UNIT <= TIME_MAX)deltaTime += TIME_UNIT;
     }
-    else if ((key == GLFW_KEY_KP_SUBTRACT || key == GLFW_KEY_DOWN) && action == GLFW_PRESS)
+    else if (key == GLFW_KEY_S  && action == GLFW_PRESS)
     {
-
+        std::cout << "deltaTime: " << deltaTime << std::endl;
+        if(deltaTime-TIME_UNIT >= TIME_MIN)deltaTime -= TIME_UNIT;
     }
-    else if (key == GLFW_KEY_0 && action == GLFW_PRESS)
+    else if (key == GLFW_KEY_T && action == GLFW_PRESS)
     {
-
+        showText = !showText;
     }
     else if (key == GLFW_KEY_R && action == GLFW_PRESS)
     {
         particleMove = !particleMove;
     }
-    else if (key == GLFW_KEY_1 && action == GLFW_PRESS)
-    {
-
-    }
-    else if (key == GLFW_KEY_2 && action == GLFW_PRESS)
-    {
-
-    }
-    else if (key == GLFW_KEY_3 && action == GLFW_PRESS)
-    {
-
-    }
-    else if (key == GLFW_KEY_4 && action == GLFW_PRESS)
-    {
-
-    }
-    else if (key == GLFW_KEY_5 && action == GLFW_PRESS)
-    {
-
-    }
-    else if (key == GLFW_KEY_6 && action == GLFW_PRESS)
-    {
-
-    }
     else if (key == GLFW_KEY_G && action == GLFW_PRESS)
     {
-
+        currMode = (mode) ((currMode + 1) % 2);
     }
     else if (key == GLFW_KEY_V && action == GLFW_PRESS)
     {
         vsync = !vsync;
         glfwSwapInterval(vsync);
     }
-    else if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
+    else if (key == GLFW_KEY_F && action == GLFW_PRESS)
     {
         static bool fullscreen = false;
         static int pastgWidth = gWidth;
@@ -1116,13 +772,24 @@ void keyboard(GLFWwindow* window, int key, int scancode, int action, int mods)
 
 void mouse(GLFWwindow* window, int button, int action, int mods)
 {
-    if (button == GLFW_MOUSE_BUTTON_MIDDLE)
-    {
-        if(action == GLFW_PRESS){
-            glfwGetCursorPos(window, &xpos, &ypos);
-            std::cout << "mouse x,y: " << xpos << ","<< ypos<<std::endl;
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        glfwGetCursorPos(window, &xpos, &ypos);
+        std::cout << "mouse x,y: " << xpos << "," << ypos << std::endl;
+        if (currMode == ORIGIN) {
+            changeOrigin();
+        } else if (currMode == ATTRACTOR) {
+            addAttractor();
         }
+    }else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+        removeAttractor();
+        std::cout << "Removed attractor" << std::endl;
     }
+}
+
+void scroll(GLFWwindow* window, double xoffset, double yoffset)
+{
+    gAttractor[currAttractor].z += yoffset * MASS_UNIT;
+    std::cout << "curr_mass: " << gAttractor[currAttractor].z  << std::endl;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1148,18 +815,18 @@ int main(int argc, char** argv)   // Create Main Function For Bringing It All To
 		exit(-1);
 	}
 
-    cout << argv[1] ;
-    if(argc > 1) pointCount = atoi(argv[1]);
-    if(argc > 2) pointSize = atoi(argv[2]);
+    if(argc > 1) particleCount = atoi(argv[1]);
+    if(argc > 2) particleSize = atoi(argv[2]);
+    cout << "particleCount: " << particleCount<< endl;
+    cout << "particleSize: " << particleSize<< endl;
+    gParticles.resize(particleCount);
+    gVelocity.resize(particleCount);
+    for(int x = 0; x < particleCount; x++)
+        gVelocity[x].x = 1.0;
 
-
-	//glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-	//glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
-	//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
 	window = glfwCreateWindow(gWidth, gHeight, "CENG 469 THE3", NULL, NULL);
 
@@ -1171,7 +838,7 @@ int main(int argc, char** argv)   // Create Main Function For Bringing It All To
 
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(1);
-
+    glewExperimental = GL_TRUE;
 	// Initialize GLEW to setup the OpenGL Function pointers
 	if (GLEW_OK != glewInit())
 	{
@@ -1185,8 +852,9 @@ int main(int argc, char** argv)   // Create Main Function For Bringing It All To
 	strcat(rendererInfo, (const char*)glGetString(GL_VERSION));
 	glfwSetWindowTitle(window, rendererInfo);
 
-	init();
+    init();
 
+    glfwSetScrollCallback(window, scroll);
     glfwSetMouseButtonCallback(window,mouse);
 	glfwSetKeyCallback(window, keyboard);
 	glfwSetWindowSizeCallback(window, reshape);
