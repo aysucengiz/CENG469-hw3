@@ -19,25 +19,25 @@ void main()
 {
     vec4 vel = imageLoad(velocity_buffer, int(gl_GlobalInvocationID.x));
     vec4 pos = imageLoad(position_buffer, int(gl_GlobalInvocationID.x));
-    pos.z -= 0.1* dt;
+
+    pos.z -= 0.01* dt;
+    pos.xy += vel.xy* dt;
+    int i;
+    for (i=0; i<currAttractor; i++){
+        vec2 dist = vec2((attractor[i].x / gWidth) - (pos.x / gWidth), (attractor[i].y / gHeight) - (pos.y / gHeight));
+        vel.xy += dt * normalize(dist) * attractor[i].z/ (dot(dist,dist)+10);
+    }
+
     if(pos.z <= 0.0){
         pos.xy = vec2(origin_x,origin_y);
-        vel.xy *=0.01;
-        pos.z += 1.0f;
+        vel.xy = vec2(vel.z,vel.w);
+        pos.z = 1.0f;
     }
-    int i;
-    pos.xy += vec2(1.0,10.0) * dt;
-
-    for (i=0; i<currAttractor; i++){
-        vec2 dist = (attractor[i].xy - pos.xy);
-        vel.xy += dt * dt * attractor[i].z * normalize(dist) / (dot(dist,dist) + 10.0);
-    }
-
-    if((pos.x > gWidth/2.0) || (pos.x < -gWidth/2.0)){
+    if((pos.x > gWidth) || (pos.x < 0.0)){
         pos.x = -pos.x;
     }
 
-    if((pos.y > gHeight/2.0) || (pos.y <  -gHeight/2.0)){
+    if((pos.y > gHeight) || (pos.y <  0.0)){
         pos.y = -pos.y;
     }
 

@@ -37,11 +37,13 @@ struct Character {
 
 std::map<GLchar, Character> Characters;
 
-GLfloat origin_x = 10.0,origin_y= 10.0, startAge=1.0; // birth point
+int gWidth = 640, gHeight = 480;
+GLfloat origin_x = (float) gWidth / 2.0,origin_y=  (float) gHeight / 2.0, startAge=1.0; // birth point
+
 struct Vertex
 {
-    Vertex(GLfloat inX=origin_x, GLfloat inY=origin_y, GLfloat inZ=startAge, GLfloat padding=0.0) : x(inX), y(inY), z(inZ) {}
-    GLfloat x, y, z, padding;
+    Vertex(GLfloat inX=origin_x, GLfloat inY=origin_y, GLfloat inZ=startAge, GLfloat inW=0.0) : x(inX), y(inY), z(inZ) {}
+    GLfloat x, y, z, w;
 
     Vertex operator+(const Vertex& other) const {return Vertex(x + other.x, y + other.y, z + other.z);}
     Vertex operator-(const Vertex& other) const {return Vertex(x - other.x, y - other.y, z - other.z);}
@@ -55,7 +57,6 @@ struct Vertex
 #define TEXT_NUM 2
 GLuint vao[TOTAL_OBJ];
 GLuint gProgram[TOTAL_OBJ];
-int gWidth = 640, gHeight = 480;
 bool vsync = true;
 
 GLint modelingMatrixLoc[TOTAL_OBJ];
@@ -95,22 +96,31 @@ vector<Vertex> gVelocity;
 vector<Vertex> gAttractor(ATTRACTOR_COUNT);  // xy: location of the attractor z: mass
 
 // Initially, the program should launch with some attractors put into the scene
-#define DEFAULT_MASS 10
-#define MASS_UNIT 10
-#define MASS_MIN 10
-#define MASS_MAX 100
-int currAttractor = -1;
-void addAttractor(GLfloat locx=xpos, GLfloat locy=ypos){
-    if(currAttractor >= 11){
+#define DEFAULT_MASS 100.0
+#define MASS_UNIT 10.0
+#define MASS_MIN 10.0
+#define MASS_MAX 1000.0
+int currAttractor = 0;
+GLfloat currMass = DEFAULT_MASS;
+void addAttractor(GLfloat locx, GLfloat locy){
+    if(currAttractor >= 12){
         for(int i=0; i<11; i++){
-            gAttractor[i] = gAttractor[i+1];
+            gAttractor[i].x = gAttractor[i+1].x;
+            gAttractor[i].y = gAttractor[i+1].y;
+            gAttractor[i].z = gAttractor[i+1].z;
         }
+        gAttractor[11].x =locx;
+        gAttractor[11].y =locy;
+        gAttractor[11].z = currMass;
+
     }else{
+        gAttractor[currAttractor].x =locx;
+        gAttractor[currAttractor].y =locy;
+        gAttractor[currAttractor].z = currMass;
         currAttractor++;
     }
-    gAttractor[currAttractor].x =locx;
-    gAttractor[currAttractor].y =locy;
-    gAttractor[currAttractor].z =DEFAULT_MASS;
+
+    currMass = DEFAULT_MASS;
 }
 
 void removeAttractor(){
@@ -136,7 +146,7 @@ void changeOrigin(){
 // This value should be editable by user interactions to slow down or speed up the runtime.
 #define TIME_UNIT 0.1
 #define TIME_MIN 0.0
-#define TIME_MAX 1.0
+#define TIME_MAX 10.0
 GLfloat dt = 0.2;
 
 
@@ -153,7 +163,7 @@ mode currMode = ORIGIN;
 
 unsigned int buffers[2];
 unsigned int bufferstex[2];
-int gParticlesDataSizeInBytes,gVelocityDataSizeInBytes;
+int gParticlesDataSizeInBytes,gVelocityDataSizeInBytes, gAttractorDataSizeInBytes;
 
 bool ReadDataFromFile(
 	const string& fileName, ///< [in]  Name of the shader file
@@ -440,8 +450,8 @@ void writeText(){
     renderText(gammaCorrText, valueTextX, valueTextHeight, valueTextWidth, glm::vec3(1, 1, 0));
 
     // modes
-    int modeTextY = gHeight - 25;
-    int modeTextX = gWidth - 320;
+    int modeTextY = 0;
+    int modeTextX = 0;
     float modeTextScale = 0.6;
     glm::vec3 textVec = glm::vec3(1, 0, 0);
     renderText("TONEMAPPED", modeTextX, modeTextY, modeTextScale, textVec);
@@ -557,11 +567,36 @@ void initShaders()
     }
     bindShader("vert.glsl","frag.glsl",0);
     bindComputeShader("comp.glsl",1);
+    bindShader("vert_text.glsl","frag_text.glsl",2);
+    bindComputeShader("comp_text.glsl",3);
 }
 
 
 
+GLuint ubo;
 void initComputeBuffers(){
+    glGenBuffers(1, &ubo);
+    glBindBuffer(GL_UNIFORM_BUFFER, ubo);
+    glBufferData(GL_UNIFORM_BUFFER, 12 * sizeof(glm::vec4), NULL, GL_DYNAMIC_DRAW);
+    gAttractorDataSizeInBytes = gAttractor.size() * 4 * sizeof(GLfloat);
+
+    GLfloat *attractorData = (GLfloat *) glMapBufferRange(GL_UNIFORM_BUFFER, 0, gAttractorDataSizeInBytes,
+                                                         GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+
+    if(attractorData) {
+        for (int i = 0; i < 12; ++i) {
+            attractorData[4 * i] = gAttractor[i].x;
+            attractorData[4 * i + 1] = gAttractor[i].y;
+            attractorData[4 * i + 2] = gAttractor[i].z;
+            attractorData[4 * i + 3] = 0.0f;
+        }
+        glUnmapBuffer(GL_UNIFORM_BUFFER);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
+    } else {
+        std::cerr << "Failed to map attractor buffer!" << std::endl;
+    }
+
     gParticlesDataSizeInBytes = gParticles.size() * 4 * sizeof(GLfloat);
     gVelocityDataSizeInBytes = gVelocity.size() * 4 * sizeof(GLfloat);
     cout << "Vertex struct size:" << sizeof(Vertex) << 4 * sizeof(GLfloat)<< endl;
@@ -621,7 +656,7 @@ void initComputeBuffers(){
 
 void init()
 {
-    addAttractor(-50.0,0.0);
+    addAttractor(origin_x-100,origin_y-100);
 	glEnable(GL_DEPTH_TEST);
     initComputeBuffers();
 	initShaders();
@@ -659,6 +694,8 @@ int sizeText = log2(std::max(gWidth, gHeight));
 
 void drawScene()
 {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
     // arrange the buffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClearColor(0, 0, 0, 1);
@@ -667,13 +704,13 @@ void drawScene()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     // draw using frag and vert shaders
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glTextureBarrier();
     setUniforms(0);
     drawObj(0);
-    glDisable(GL_BLEND);
+
+    cout << gAttractor[currAttractor-1].x << " " << gAttractor[currAttractor-1].y << " " << gAttractor[currAttractor-1].z << " "  << endl;
+    //cout << currAttractor  << endl;
 }
 
 
@@ -688,7 +725,7 @@ void display(GLFWwindow *window)
 
     // show on the screen
     drawScene();
-    writeText();
+    //writeText();
 }
 
 
@@ -697,12 +734,18 @@ void reshape(GLFWwindow* window, int w, int h)
 	w = w < 1 ? 1 : w;
 	h = h < 1 ? 1 : h;
 
+    /*origin_x *= w / gWidth;
+    origin_y *=  h / gHeight;
+    for(int i=0; i<12; i++){
+        gAttractor[i].x *= w / gWidth;
+        gAttractor[i].y *= h / gHeight;
+    }*/
 	gWidth = w;
 	gHeight = h;
 
 	glViewport(0, 0, w, h);
 
-    projectionMatrix = glm::ortho(-w / 2.0f, w / 2.0f,-h / 2.0f, h / 2.0f,-1.0f, 1.0f);
+    projectionMatrix = glm::ortho( 0.0f,(float) w, (float) h,0.0f,-1.0f, 1.0f);
 
     resizeText(gWidth,gHeight);
     sizeText = log2(std::max(gWidth, gHeight));
@@ -780,7 +823,7 @@ void mouse(GLFWwindow* window, int button, int action, int mods)
         if (currMode == ORIGIN) {
             changeOrigin();
         } else if (currMode == ATTRACTOR) {
-            addAttractor();
+            addAttractor(xpos,ypos);
         }
     }else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
         removeAttractor();
@@ -790,8 +833,9 @@ void mouse(GLFWwindow* window, int button, int action, int mods)
 
 void scroll(GLFWwindow* window, double xoffset, double yoffset)
 {
-    gAttractor[currAttractor].z += yoffset * MASS_UNIT;
-    std::cout << "curr_mass: " << gAttractor[currAttractor].z  << std::endl;
+    currMass += yoffset * MASS_UNIT;
+    currMass = currMass >= 0 ? currMass : 0.0;
+    std::cout << "curr_mass: " << currMass  << std::endl;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -827,8 +871,10 @@ int main(int argc, char** argv)   // Create Main Function For Bringing It All To
     }
     gVelocity.resize(particleCount);
     for(int x = 0; x < particleCount; x++) {
-        gVelocity[x].x = 0.0;
-        gVelocity[x].y = 0.0;
+        gVelocity[x].x = (((double)rand()) / RAND_MAX - 0.5 )* 10.0;
+        gVelocity[x].y = (((double)rand()) / RAND_MAX - 0.5) * 10.0;
+        gVelocity[x].z = gVelocity[x].x;
+        gVelocity[x].w = gVelocity[x].y;
     }
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
